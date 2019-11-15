@@ -36,9 +36,13 @@ struct Particle
 {
     Eigen::Vector2d x; //position
     Eigen::Vector2d v; //velocity
-    Eigen::Vector2d f; //force
+    Eigen::Vector2d f_pressure; //force
+    Eigen::Vector2d f_viscosity; 
+    Eigen::Vector2d f_surface;
     Eigen::Vector3i c; //color
+    Eigen::Vector2d normal;
     double m; //mass
     double d; //density
     double p; //pressure
+    double k; //curvature
 };
