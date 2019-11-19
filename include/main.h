@@ -45,4 +45,6 @@ struct Particle
     double d; //density
     double p; //pressure
     double k; //curvature
+
+    Eigen::Vector2d v_prev, a_prev;
 };
