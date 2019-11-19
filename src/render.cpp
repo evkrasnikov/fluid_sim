@@ -3,7 +3,7 @@
 
 
 
-bool init(SDL_Window* &gWindow, SDL_Renderer* &gRenderer)
+bool init(SDL_Window* &gWindow, SDL_Renderer* &gRenderer, int screen_width, int screen_height)
 {
 	//Initialization flag
 	bool success = true;
@@ -23,7 +23,7 @@ bool init(SDL_Window* &gWindow, SDL_Renderer* &gRenderer)
 		}
 
 		//Create window
-		gWindow = SDL_CreateWindow( "SDL Tutorial", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN );
+		gWindow = SDL_CreateWindow( "SDL Tutorial", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, screen_width, screen_height, SDL_WINDOW_SHOWN );
 		if( gWindow == NULL )
 		{
 			printf( "Window could not be created! SDL Error: %s\n", SDL_GetError() );

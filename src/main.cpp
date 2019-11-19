@@ -10,16 +10,14 @@
 
 #include "render.h"
 
-#define GRID_WIDTH 20
-#define GRID_HEIGHT 20
-#define WORLD_WIDTH 320
-#define WORLD_HEIGHT 240
+#define WORLD_WIDTH 120
+#define WORLD_HEIGHT 140
 
-#define K_PRESSURE 1.0
-#define RHO0_PRESSURE 1.0
-#define MU_VISCOSITY 1.0
-#define NORMAL_THR 1.0
-#define SIGMA_SURFACE 1.0
+#define K_PRESSURE 200
+#define RHO0_PRESSURE 1
+#define MU_VISCOSITY 10.0
+#define NORMAL_THR 10.0
+#define SIGMA_SURFACE 10.0
 #define GRAVITY 9.81
 
 
@@ -33,25 +31,27 @@ class SpatialGrid
 {
     public:
     int width, height;
-    int cell_size;
-    std::vector<Particle>** grid; //each cell stores a linked list of particles
+    double cell_size;
+
+    //grid is setup in such a way that it is safe to access up to +/-1 cell outside of the grid
+    std::vector<Particle>** grid; 
     int total_particles;
 
-    SpatialGrid(int _world_width, int _world_height, int _smoothing_width)
+    SpatialGrid(int _world_width, int _world_height, double _smoothing_width)
     {
         cell_size = _smoothing_width;
-        width = (_world_width + _smoothing_width-1)/cell_size;
-        height = (_world_width + _smoothing_width-1)/cell_size;
+        width = ceil((_world_width)/cell_size);
+        height = ceil((_world_width)/cell_size);
 
-        grid = new std::vector<Particle>*[height];
-        for (int i=0; i < height; i++)
-            grid[i] = new std::vector<Particle>[width];
+        grid = new std::vector<Particle>*[height+2];
+        for (int i=0; i < height+2; i++)
+            grid[i] = new std::vector<Particle>[width+2];
         total_particles=0;
     }
 
     ~SpatialGrid()
     {
-        for (int i=0; i < height; i++)
+        for (int i=0; i < height+2; i++)
             delete[] grid[i];
         delete[] grid;
     }
@@ -61,32 +61,61 @@ class SpatialGrid
         //find the cell to put it in and append
         int cell_x = floor(p.x(0)/cell_size);
         int cell_y = floor(p.x(1)/cell_size);
-        grid[cell_y][cell_x].push_back(p);
+
+        grid[cell_y+1][cell_x+1].push_back(p);
     }
 
     void clear()
     {
-        for (int i = 0; i < height; i++)
+        for (int i = 0; i < height+2; i++)
         {
-            for (int j = 0; j < width; j++)
+            for (int j = 0; j < width+2; j++)
             {
                 grid[i][j].clear();
             }
         }
     }
 
+    std::vector<Particle>& operator() (int row, int col)
+    {
+        return grid[row+1][col+1];
+    }
+
 };
+
+struct ranges
+{
+    int i_from, i_to;
+    int j_from, j_to;
+};
+
+void clip_coordinates(int& i_lo, int& i_hi,
+    int& j_lo, int& j_hi,
+    int max_i, int max_j)
+{
+    if (i_lo < 0) i_lo = 0;
+    if (i_hi > max_i) i_hi = max_i;
+    if (j_lo < 0) j_lo = 0;
+    if (j_hi > max_j) j_hi = max_j;
+}
+
 
 void interpDensityNbr(SpatialGrid& g, int i, int j, int k,  SmoothingFuncS f, double h)
 {
-    Particle& p = g.grid[i][j][k];
+    Particle& p = g(i,j)[k];
     double density = 0;
+    // int ii_from = i - 1;
+    // int ii_to = i + 1;
+    // int jj_from  = j -1;
+    // int jj_to = j + 1;
+    // clip_coordinates(ii_from, ii_to, jj_from, jj_to, g.height-1, g.width-1);
+
     for (int ii = -1; ii <= 1; ii++) //vertical cell offset
     {
         for (int jj = -1; jj <= 1; jj++) //horizontal cell offset
         {
             //get the list of particles in that grid
-            std::vector<Particle>& p_list = g.grid[i+ii][j+jj];
+            std::vector<Particle>& p_list = g(i+ii, j+jj); //g.grid[i+ii][j+jj];
             //for (int kk = 0; kk < p_list.size(); kk++)
             for (Particle& pj : p_list)
             {
@@ -128,7 +157,7 @@ void interp(SpatialGrid& g, InterpFunc ifunc, SmoothingFuncV f, double h)
     {
         for (int j = 0; j < g.width; j++)
         {
-            for (int k = 0; k < g.grid[i][j].size(); k++)
+            for (int k = 0; k < g(i,j).size(); k++)
             {
                 ifunc(g, i, j, k, f, h);
             }
@@ -143,7 +172,7 @@ void interp(SpatialGrid& g, InterpFunc ifunc, SmoothingFuncS f, double h)
     {
         for (int j = 0; j < g.width; j++)
         {
-            for (int k = 0; k < g.grid[i][j].size(); k++)
+            for (int k = 0; k < g(i,j).size(); k++)
             {
                 ifunc(g, i, j, k, f, h);
             }
@@ -153,14 +182,14 @@ void interp(SpatialGrid& g, InterpFunc ifunc, SmoothingFuncS f, double h)
 
 void interpForcePressure(SpatialGrid& g, int i, int j, int k,  SmoothingFuncV f, double h)
 {
-    Particle& p = g.grid[i][j][k];
+    Particle& p = g(i,j)[k];
     Eigen::Vector2d f_pressure = Eigen::Vector2d::Zero();
     for (int ii = -1; ii <= 1; ii++) //vertical cell offset
     {
         for (int jj = -1; jj <= 1; jj++) //horizontal cell offset
         {
             //get the list of particles in that grid
-            std::vector<Particle>& p_list = g.grid[i+ii][j+jj];
+            std::vector<Particle>& p_list = g(i+ii,j+jj);
             //for (int kk = 0; kk < p_list.size(); kk++)
             for (Particle& pj : p_list)
             {
@@ -176,14 +205,14 @@ void interpForcePressure(SpatialGrid& g, int i, int j, int k,  SmoothingFuncV f,
 
 void interpForceViscosity(SpatialGrid& g, int i, int j, int k,  SmoothingFuncS f, double h)
 {
-    Particle& p = g.grid[i][j][k];
+    Particle& p = g(i,j)[k];
     Eigen::Vector2d f_viscosity = Eigen::Vector2d::Zero();
     for (int ii = -1; ii <= 1; ii++) //vertical cell offset
     {
         for (int jj = -1; jj <= 1; jj++) //horizontal cell offset
         {
             //get the list of particles in that grid
-            std::vector<Particle>& p_list = g.grid[i+ii][j+jj];
+            std::vector<Particle>& p_list = g(i+ii,j+jj);
             //for (int kk = 0; kk < p_list.size(); kk++)
             for (Particle& pj : p_list)
             {
@@ -198,14 +227,14 @@ void interpForceViscosity(SpatialGrid& g, int i, int j, int k,  SmoothingFuncS f
 
 void interpNormal(SpatialGrid& g, int i, int j, int k, SmoothingFuncV f, double h)
 {
-    Particle& p = g.grid[i][j][k];
+    Particle& p = g(i,j)[k];
     Eigen::Vector2d normal = Eigen::Vector2d::Zero();
     for (int ii = -1; ii <= 1; ii++) //vertical cell offset
     {
         for (int jj = -1; jj <= 1; jj++) //horizontal cell offset
         {
             //get the list of particles in that grid
-            std::vector<Particle>& p_list = g.grid[i+ii][j+jj];
+            std::vector<Particle>& p_list = g(i+ii,j+jj);
             //for (int kk = 0; kk < p_list.size(); kk++)
             for (Particle& pj : p_list)
             {
@@ -219,7 +248,7 @@ void interpNormal(SpatialGrid& g, int i, int j, int k, SmoothingFuncV f, double 
 
 void interpForceSurface(SpatialGrid& g, int i, int j, int k, SmoothingFuncS f, double h)
 {
-    Particle& p = g.grid[i][j][k];
+    Particle& p = g(i,j)[k];
     double curvature = 0;
     double n_mag = p.normal.norm();
     if (n_mag < NORMAL_THR)
@@ -234,7 +263,7 @@ void interpForceSurface(SpatialGrid& g, int i, int j, int k, SmoothingFuncS f, d
         for (int jj = -1; jj <= 1; jj++) //horizontal cell offset
         {
             //get the list of particles in that grid
-            std::vector<Particle>& p_list = g.grid[i+ii][j+jj];
+            std::vector<Particle>& p_list = g(i+ii,j+jj);
             //for (int kk = 0; kk < p_list.size(); kk++)
             for (Particle& pj : p_list)
             {
@@ -274,9 +303,9 @@ void integrate(SpatialGrid& gfrom, SpatialGrid& gto, double dt)
     {
         for (int j = 0; j < gfrom.width; j++)
         {
-            for(int k = 0; k < gfrom.grid[i][j].size(); k++)
+            for(int k = 0; k < gfrom(i,j).size(); k++)
             {
-                Particle& p = gfrom.grid[i][j][k];
+                Particle& p = gfrom(i,j)[k];
                 // std::cout << "before: " << p.x.transpose() << std::endl;
                 // std::cout << p.v.transpose() << std::endl;
                 // std::cout << p.a_prev.transpose() << std::endl;
@@ -303,6 +332,7 @@ void integrate(SpatialGrid& gfrom, SpatialGrid& gto, double dt)
                     p.x(1) = 0;
                     p.v_prev(1) = -p.v_prev(1);
                     p.v(1) = -p.v(1);
+                    //std::cout << "hi\n";
                 }
                 if (p.x(0) > WORLD_WIDTH)
                 {
@@ -331,9 +361,9 @@ void render_particles(SpatialGrid& g, SDL_Renderer* gRenderer)
     {
         for (int j = 0; j < g.width; j++)
         {
-            for(int k = 0; k < g.grid[i][j].size(); k++)
+            for(int k = 0; k < g(i,j).size(); k++)
             {
-                Particle& p = g.grid[i][j][k];
+                Particle& p = g(i,j)[k];
                 SDL_SetRenderDrawColor( gRenderer, 0xFF, 0x00, 0x00, 0xFF );
                 SDL_RenderDrawPoint( gRenderer, round(p.x(0)), round(WORLD_HEIGHT-p.x(1)) );
             }
@@ -343,10 +373,10 @@ void render_particles(SpatialGrid& g, SDL_Renderer* gRenderer)
 
 void init_grid(SpatialGrid& g)
 {
-    double offset_x = 100, offset_y = 100;
-    double step = 1.2;
-    for (int i = 0; i < 10; i++)
-    for (int j = 0; j < 10; j++)
+    double offset_x = 50, offset_y = 30;
+    double step = 0.8;
+    for (int i = 0; i < 30; i++)
+    for (int j = 0; j < 30; j++)
     {
         Particle p;
         p.x << offset_x + j*step, offset_y + i*step;
@@ -364,9 +394,6 @@ int main(int argc, char* args[])
     //The window we'll be rendering to
     SDL_Window* gWindow = NULL;
 
-    //The surface contained by the window
-    SDL_Surface* gScreenSurface = NULL;
-
     //The image we will load and show on the screen
     SDL_Surface* gHelloWorld = NULL;
 
@@ -375,14 +402,14 @@ int main(int argc, char* args[])
 
     int x = 0, y = 0;
 
-    const int h = 1;
+    const int h = 2;
     SpatialGrid g1(WORLD_WIDTH, WORLD_HEIGHT, h);
     init_grid(g1);
     SpatialGrid g2(WORLD_WIDTH, WORLD_HEIGHT, h);
-    double dt = 0.01;
+    double dt = 0.03;
 
     //Start up SDL and create window
-    if( !init(gWindow, gRenderer) )
+    if( !init(gWindow, gRenderer, WORLD_WIDTH, WORLD_HEIGHT) )
     {
         printf( "Failed to initialize!\n" );
     }
@@ -476,18 +503,5 @@ int main(int argc, char* args[])
     //Free resources and close SDL
     close(gWindow, gRenderer);
 
-    return 0;
-
-    std::cout << "waow!" << std::endl;
-    Particle p;
-    //interpDensity(p, test);
-    //try to create a simulation loop
-
-    for (int i = 0; i < 100; i++)
-    {
-
-
-
-    }
     return 0;
 }
