@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.10)
 
 # Build options
 #option(BUILD_OPENGL_EXAMPLE "Build OpenGL example." OFF)
-set(CMAKE_BUILD_TYPE Release)
-#add_compile_options(-g)
+#set(CMAKE_BUILD_TYPE Debug)
+add_compile_options(-g -O3)
 
 # Create the project
 set(PROJECT_NAME visc_sim )
