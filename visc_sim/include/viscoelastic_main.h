@@ -25,18 +25,29 @@ struct Spring
     int p_idx1, p_idx2;
 };
 
+struct Sphere
+{
+    Eigen::Vector2d pos; //center of sphere
+    double r; //sphere radius
+};
+
+// struct Rectangle
+// {
+//     Eigen::Vector
+// }
+
 class FluidSolver
 {
     public:
     std::vector<Particle> particles;
     int width, height; //world dims
     
-    const double H = 6.4;
-    const double RHO0 = 15;
-    const double K = 0.5;//15;
-    const double KNEAR = 5;//165;
-    const double SIGMA = 0;
-    const double BETA  = 0.2;//0.3;
+    const double H = 3;//3.4;
+    const double RHO0 = 10;//15;
+    const double K = 0.04;//0.5;
+    const double KNEAR = 0.1; //5;
+    const double SIGMA = 1;//0;
+    const double BETA  = 0.2; //0.2;
 
     //keep 2 ping ponging grids
     int active_grid; // indicates which grid is currently in use
@@ -47,6 +58,8 @@ class FluidSolver
 
     std::map<int, Spring> springs; //map of a pair of particles to undeformed length
     const int hash_const = 10000; //FIXME: lets assume for now i will not have more than 10000 particles
+
+    std::vector<Sphere> spheres;
 
     //produces unique key (up to 10k particles) given two particle indeces
     int springKey(int particle_idx1, int particle_idx2)
@@ -72,6 +85,14 @@ class FluidSolver
         grid[1].resize(grid_height*grid_width);
         active_grid = 0;
         //nbrs.resize(grid_height*grid_width);
+
+        Sphere s;
+        s.pos << 50,50;
+        s.r = 20;
+        spheres.push_back(s);
+        s.pos << 20, 20;
+        s.r = 10;
+        spheres.push_back(s);
 
     }
 
@@ -151,8 +172,8 @@ class FluidSolver
         }
         // particles[debug_idx].print();
 
-        // adjustSprings(dt);
-        // applySprings(dt);
+        //adjustSprings(dt);
+        //applySprings(dt);
         doubleDensityRelaxation(dt);
 
         clearGrid(other_grid);
@@ -161,34 +182,15 @@ class FluidSolver
 
         for (int i = 0; i < particles.size(); i++)
         {
-            //update velocity
             Particle& this_p = particles[i];
-            this_p.v = (this_p.pos - this_p.prev_pos)/dt;
 
             //collision resolution TODO better
-            Eigen::Vector2d factor1; factor1 << 0,0;//0, 0.9;
-            Eigen::Vector2d factor2; factor2 << 0,0;//0.9, 0;
-            if (this_p.pos(0)<0)
-            {
-                this_p.pos(0) = 0.01;
-                this_p.v = this_p.v.array() * factor1.array();
-            }
-            else if (this_p.pos(0) > width)
-            {
-                this_p.pos(0) = width-0.01;
-                this_p.v = this_p.v.array() * factor1.array();
-            }
+            collisionWalls(this_p, dt);
+            collisionSpheres(this_p);
 
-            if (this_p.pos(1)<0)
-            {
-                this_p.pos(1) = 0.01;
-                this_p.v = this_p.v.array() * factor2.array();
-            }
-            else if (this_p.pos(1) > height)
-            {
-                this_p.pos(1) = height-0.01;
-                this_p.v = this_p.v.array() * factor2.array();
-            }
+            //update velocity
+            
+            this_p.v = (this_p.pos - this_p.prev_pos)/dt;
 
             //updateParticleIndex(this_p);
             addParticleGrid(this_p, other_grid, i);
@@ -238,10 +240,77 @@ class FluidSolver
         
     }
 
+    void collisionWalls(Particle& this_p, double dt)
+    {
+        double D_STICK = H/2;
+        double K_STICK = 0.5;
+
+        Eigen::Vector2d factor1; factor1 << 0,0.8;//0, 0.9;
+        Eigen::Vector2d factor2; factor2 << 0.8,0;//0.9, 0;
+        if (this_p.pos(0)<0)
+        {
+            this_p.pos(0) = 0.01;
+            this_p.v = this_p.v.array() * factor1.array();
+        }
+        // if (this_p.pos(0)<D_STICK) //near the boundary
+        // {
+        //     this_p.pos(0) = 0.01;
+        //     this_p.v = this_p.v.array() * factor1.array();
+        //     //Eigen::Vector2d normal; normal << 1, 0;
+        //     double d = this_p.pos(0);
+        //     this_p.v(0) = -dt*K_STICK*d*(1-d/D_STICK);
+        // }
+
+        if (this_p.pos(0) > width)
+        {
+            this_p.pos(0) = width-0.01;
+            this_p.v = this_p.v.array() * factor1.array();
+        }
+        // else if (width - this_p.pos(0)<D_STICK)
+        // {
+        //     double d = this_p.pos(0);
+        // }
+
+        if (this_p.pos(1)<0)
+        {
+            this_p.pos(1) = 0.01;
+            this_p.v = this_p.v.array() * factor2.array();
+        }
+        else if (this_p.pos(1) > height)
+        {
+            this_p.pos(1) = height-0.01;
+            this_p.v = this_p.v.array() * factor2.array();
+        }
+    }
+
+    void collisionSpheres(Particle& this_p)
+    {
+
+        for (int i = 0; i < spheres.size(); i++)
+        {
+            //std::cout << i << std::endl;
+            Eigen::Vector2d normal = this_p.pos - spheres[i].pos;
+            Eigen::Vector2d norm_vec = normal.normalized();
+            double dist = normal.norm();
+            if (dist <= spheres[i].r)
+            {
+                //std::cout << "inside!!1" << std::endl;
+                //split velocity vector into normal and tangential compnents
+                Eigen::Vector2d v_norm = this_p.v.dot(norm_vec)*norm_vec;
+                this_p.v -= v_norm;
+                this_p.v *= 0.8;
+
+                //extract particle form the sphere
+                this_p.pos += (spheres[i].r - dist)*norm_vec;
+            }
+        }
+    }
+
     void adjustSprings(double dt)
     {
         double GAMMA = 0.1;
-        double ALPHA = 0.9;
+        double ALPHA = 0.5;
+        double L = H/2;//H/2;
 
         for (int i = 0; i< particles.size(); i++)
         {
@@ -259,15 +328,16 @@ class FluidSolver
                     int key = springKey(i, nbrs[i][j]);
                     Spring s = {H, i, nbrs[i][j]};
                     auto ret = springs.insert(std::pair<int,Spring>(key, s));
-                    double rest_len = (ret.first->second).l;
+                    double& rest_len = (ret.first->second).l;
                     double d = GAMMA*rest_len;
-                    if (rij_mag > rest_len + d)
+                    if (rij_mag > L + d)
                     {
-                        rest_len += dt*ALPHA*(rij_mag - rest_len - d);
+                        rest_len += dt*ALPHA*(rij_mag - L - d);
+                        //std::cout << rest_len << std::endl;
                     }
-                    else if (rij_mag < rest_len - d)
+                    else if (rij_mag < L - d)
                     {
-                        rest_len -= dt*ALPHA*(rest_len-d-rij_mag);
+                        rest_len -= dt*ALPHA*(L-d-rij_mag);
                     }
                 }
             }
@@ -288,7 +358,9 @@ class FluidSolver
     
     void applySprings(double dt)
     {
-        double K_SPRING = 0.3;
+        double K_SPRING = 3;//0.3;
+        std::cout << "num springs " << springs.size() << std::endl; 
+        std::cout << "num particles " << particles.size() << std::endl; 
         for (auto it = springs.begin(); it != springs.end(); it++)
         {
             Spring &s = it->second;
@@ -296,7 +368,8 @@ class FluidSolver
             Particle &p2 = particles[s.p_idx2];
             Eigen::Vector2d rij = p1.pos - p2.pos;
             Eigen::Vector2d D = dt*dt*K_SPRING*(1-s.l/H)*(s.l-rij.norm())*rij.normalized();
-            
+            // std::cout << "spring " << s.l << " " << rij.transpose() << std::endl;
+            // std::cout << D.transpose() << std::endl;
             p1.pos -= 0.5*D;
             p2.pos += 0.5*D;
         }

@@ -46,14 +46,42 @@ void render_particles(FluidSolver& solver, SDL_Renderer* gRenderer, SDL_Texture*
 
 }
 
+void render_spheres(FluidSolver& solver, SDL_Renderer* gRenderer, SDL_Texture* texture)
+{
+    Eigen::Vector2d c; //shift vector
+    c << 0, WORLD_HEIGHT;
+    Eigen::Matrix2d s_mat; //scale matrix
+    s_mat << RENDER_WIDTH/WORLD_WIDTH, 0, 0, -RENDER_HEIGHT/WORLD_HEIGHT;
+    // std::cout << s << std::endl;
+    for(int k = 0; k < solver.spheres.size(); k++)
+    {
+        Sphere s = solver.spheres[k];
+        //SDL_SetRenderDrawColor( gRenderer, 0xFF, 0x00, 0x00, 0xFF );
+        Eigen::Vector2d sphere_pos = s.pos;
+        Eigen::Vector2d world_pos = s_mat*(sphere_pos-c);
+        Eigen::Vector2d world_r; 
+        world_r << s.r*RENDER_WIDTH/WORLD_WIDTH, s.r*RENDER_HEIGHT/WORLD_HEIGHT;
+        //std::cout << "pos " << particle_pos.transpose() << " " << world_pos.transpose() << std::endl;
+
+        int x = round(world_pos(0)-world_r(0));
+        int y = round(world_pos(1)-world_r(1));
+        SDL_Rect srcrect = {0,0,51,51};
+        SDL_Rect dstrect = {x,y,int(world_r(0)*2),int(world_r(1)*2)};
+        SDL_RenderCopy(gRenderer, texture, &srcrect, &dstrect);
+
+        
+        
+    }
+}
+
 void init_solver(FluidSolver& solver)
 {
-    for (double i = 0; i< 40; i+=1) {
-        for (double j = 100; j<130; j+=1) {
+    for (double i = 100; i< 140; i+=1) {
+        for (double j = 20; j<70; j+=1) {
             std::cout << i << " " << j << std::endl;
             Particle p;
-            p.pos << i,j;
-            p.prev_pos << i,j;
+            p.pos << j,i;
+            p.prev_pos << j,i;
             p.v << 0,0;
             p.nidx = 0;
             p.nx = 0;
@@ -62,6 +90,24 @@ void init_solver(FluidSolver& solver)
         }
     }
 }
+
+void init_solver2(FluidSolver& solver)
+{
+    for (double i = 1; i< 20; i+=1) {
+        for (double j = 30; j<70; j+=1) {
+            std::cout << i << " " << j << std::endl;
+            Particle p;
+            p.pos << j,i;
+            p.prev_pos << j,i;
+            p.v << 0,0;
+            p.nidx = 0;
+            p.nx = 0;
+            p.ny = 0;
+            solver.addParticle(p, solver.active_grid);
+        }
+    }
+}
+
 
 int main(int argc, char* args[])
 {
@@ -89,11 +135,19 @@ int main(int argc, char* args[])
     SDL_Renderer* gRenderer = NULL;
 
     //Current displayed texture
-    SDL_Texture* gTexture = NULL;   
+    SDL_Texture* textureParticle = NULL;
+    SDL_Texture* textureSphere = NULL;   
 
     FluidSolver solver(WORLD_WIDTH, WORLD_HEIGHT);
     double dt = 1.0/30.0;
     init_solver(solver);
+    //init_solver2(solver);
+
+    // struct alol {int x; double y;} a;
+    // double &gg = a.y;
+    // gg = 6;
+    // std::cout << gg << " " << a.y << std::endl;
+    // return 0;
 
     //Start up SDL and create window
     if( !init(gWindow, gRenderer, RENDER_WIDTH, RENDER_HEIGHT) )
@@ -103,8 +157,10 @@ int main(int argc, char* args[])
     else
     {
         //try to load the texture
-        gTexture = loadTexture("../../assets/dot9.png", gRenderer);
-        if (gTexture == NULL)
+        textureParticle = loadTexture("../../assets/dot9.png", gRenderer);
+        textureSphere = loadTexture("../../assets/sphere51.png", gRenderer);
+        SDL_SetTextureColorMod(textureSphere, 128, 128, 128);
+        if (textureParticle == NULL || textureSphere==NULL)
         {
             printf("Texture was not loaded. Exiting!\n");
             return 0;
@@ -139,13 +195,14 @@ int main(int argc, char* args[])
             SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
             SDL_RenderClear( gRenderer );
 
-            render_particles(solver, gRenderer, gTexture);
+            render_spheres(solver, gRenderer, textureSphere);
+            render_particles(solver, gRenderer, textureParticle);
 
             // SDL_SetRenderDrawColor( gRenderer, 0xFF, 0x00, 0x00, 0xFF );
             // for (int i = 0; i < 20; i++)
             //     SDL_RenderDrawPoint( gRenderer, x+i+50, y+i+50 );
-            // SDL_Rect srcrect = {0,0,5,5};
-            // SDL_Rect dstrect = {0,0,5,5};
+            // SDL_Rect srcrect = {0,0,9,9};
+            // SDL_Rect dstrect = {0,0,20,20};
             // SDL_RenderCopy(gRenderer, gTexture, &srcrect, &dstrect);
 
             SDL_RenderPresent(gRenderer);
