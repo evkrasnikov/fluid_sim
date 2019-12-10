@@ -5,6 +5,7 @@
 #include "Eigen/Dense"
 #include <cmath>
 #include <iostream>
+#include "SDL2/SDL_image.h"
 
 struct Particle
 {
@@ -42,11 +43,11 @@ class FluidSolver
     std::vector<Particle> particles;
     int width, height; //world dims
     
-    const double H = 3;//3.4;
-    const double RHO0 = 10;//15;
-    const double K = 0.04;//0.5;
-    const double KNEAR = 0.1; //5;
-    const double SIGMA = 1;//0;
+    const double H = 3.4;//3;//
+    const double RHO0 = 15;//10;//
+    const double K = 0.5;//0.04;//
+    const double KNEAR = 5;//0.1; //
+    const double SIGMA = 0;//1;//
     const double BETA  = 0.2; //0.2;
 
     //keep 2 ping ponging grids
@@ -172,8 +173,8 @@ class FluidSolver
         }
         // particles[debug_idx].print();
 
-        //adjustSprings(dt);
-        //applySprings(dt);
+        adjustSprings(dt, iter == 0); //false/**/);
+        applySprings(dt);
         doubleDensityRelaxation(dt);
 
         clearGrid(other_grid);
@@ -306,12 +307,14 @@ class FluidSolver
         }
     }
 
-    void adjustSprings(double dt)
+    void adjustSprings(double dt, bool is_first_step)
     {
         double GAMMA = 0.1;
         double ALPHA = 0.5;
         double L = H/2;//H/2;
 
+        //first, look thhrough the nbrs of every particle and 
+        // add a spring if distance b/w particles is < H
         for (int i = 0; i< particles.size(); i++)
         {
             Particle& this_p = particles[i];
@@ -327,28 +330,59 @@ class FluidSolver
                     //check if spring exists and add if it doesnt
                     int key = springKey(i, nbrs[i][j]);
                     Spring s = {H, i, nbrs[i][j]};
+                    if (is_first_step) //"molding"
+                        s.l = rij_mag;
                     auto ret = springs.insert(std::pair<int,Spring>(key, s));
-                    double& rest_len = (ret.first->second).l;
-                    double d = GAMMA*rest_len;
-                    if (rij_mag > L + d)
-                    {
-                        rest_len += dt*ALPHA*(rij_mag - L - d);
-                        //std::cout << rest_len << std::endl;
-                    }
-                    else if (rij_mag < L - d)
-                    {
-                        rest_len -= dt*ALPHA*(L-d-rij_mag);
-                    }
                 }
             }
         }
 
+        int num_deleted = 0;
         std::vector<int> to_delete;
+        //loop through all spring and update rest lengths
         for (auto it = springs.begin(); it != springs.end(); it++)
         {
-            if ((it->second).l > H)
+            Particle& p1 = particles[(it->second).p_idx1];
+            Particle& p2 = particles[(it->second).p_idx2];
+            double& rest_len = (it->second).l;
+            double d = GAMMA*rest_len;
+            double rij_mag = (p1.pos - p2.pos).norm();
+            
+            if (rij_mag > rest_len + d)
+            {
+                rest_len += dt*ALPHA*(rij_mag - rest_len - d);
+                //std::cout << "expand " << rest_len << std::endl;
+                // if (rij_mag > H)
+                //     std::cout << rij_mag << " BOOOOOYAAAA!\n";
+            }
+            else if (rij_mag < rest_len - d)
+            {
+                rest_len -= dt*ALPHA*(rest_len-d-rij_mag);
+            }
+
+            //check if spring needs to be deleted
+            if (rest_len > H)
+            {
                 to_delete.push_back(it->first); 
+                num_deleted++;
+                //assert(0);
+            }
+            
         }
+
+
+        
+        // for (auto it = springs.begin(); it != springs.end(); it++)
+        // {
+        //     //printf("%f \n", (it->second).l);
+        //     if ((it->second).l > H)
+        //     {
+        //         to_delete.push_back(it->first); 
+        //         num_deleted++;
+        //         assert(0);
+        //     }
+        // }
+        printf("Number of deleted springs %d\n", num_deleted);
         
         for (auto it = 0; it < to_delete.size(); it++)
         {
@@ -358,7 +392,7 @@ class FluidSolver
     
     void applySprings(double dt)
     {
-        double K_SPRING = 3;//0.3;
+        double K_SPRING = 30;//0.3;
         std::cout << "num springs " << springs.size() << std::endl; 
         std::cout << "num particles " << particles.size() << std::endl; 
         for (auto it = springs.begin(); it != springs.end(); it++)
@@ -370,8 +404,8 @@ class FluidSolver
             Eigen::Vector2d D = dt*dt*K_SPRING*(1-s.l/H)*(s.l-rij.norm())*rij.normalized();
             // std::cout << "spring " << s.l << " " << rij.transpose() << std::endl;
             // std::cout << D.transpose() << std::endl;
-            p1.pos -= 0.5*D;
-            p2.pos += 0.5*D;
+            p1.pos += 0.5*D;
+            p2.pos -= 0.5*D;
         }
         // for (int i = 0; i< particles.size(); i++)
         // {

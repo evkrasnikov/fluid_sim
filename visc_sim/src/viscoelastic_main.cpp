@@ -5,6 +5,7 @@
 #include <map>
 
 #include<SDL2/SDL.h>
+#include<SDL2/SDL_image.h>
 
 #define WORLD_WIDTH 100.0
 #define WORLD_HEIGHT 150.0
@@ -76,7 +77,7 @@ void render_spheres(FluidSolver& solver, SDL_Renderer* gRenderer, SDL_Texture* t
 
 void init_solver(FluidSolver& solver)
 {
-    for (double i = 100; i< 140; i+=1) {
+    for (double i = 100; i< 120; i+=1) {
         for (double j = 20; j<70; j+=1) {
             std::cout << i << " " << j << std::endl;
             Particle p;
@@ -108,6 +109,37 @@ void init_solver2(FluidSolver& solver)
     }
 }
 
+void init_solver3(FluidSolver& solver)
+{
+    for (double i = 120; i< 140; i+=1) {
+        for (double j = 0; j<100; j+=1) {
+            Particle p;
+            p.pos << j,i;
+            p.prev_pos << j,i;
+            p.v << 0,0;
+            p.nidx = 0;
+            p.nx = 0;
+            p.ny = 0;
+            solver.addParticle(p, solver.active_grid);
+        }
+    }
+}
+
+void init_solver4(FluidSolver& solver)
+{
+    for (double i = 110; i< 140; i+=1) {
+        for (double j = 0; j<50; j+=1) {
+            Particle p;
+            p.pos << j,i;
+            p.prev_pos << j,i;
+            p.v << 15,0;
+            p.nidx = 0;
+            p.nx = 0;
+            p.ny = 0;
+            solver.addParticle(p, solver.active_grid);
+        }
+    }
+}
 
 int main(int argc, char* args[])
 {
@@ -124,6 +156,12 @@ int main(int argc, char* args[])
     //         test.erase(it);
     // }
     // return 0;
+    
+    //
+    //create a directory to store pngs
+    system("rm -r ./pngs");
+    system("mkdir -p ./pngs");
+    char filename_buf[100];
 
     //The window we'll be rendering to
     SDL_Window* gWindow = NULL;
@@ -138,10 +176,12 @@ int main(int argc, char* args[])
     SDL_Texture* textureParticle = NULL;
     SDL_Texture* textureSphere = NULL;   
 
+    SDL_Surface *frm = SDL_CreateRGBSurface(0, RENDER_WIDTH, RENDER_HEIGHT, 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000); //holds the output frame
+
     FluidSolver solver(WORLD_WIDTH, WORLD_HEIGHT);
-    double dt = 1.0/30.0;
+    double dt = 1.0/30.0;///4.0;
     init_solver(solver);
-    //init_solver2(solver);
+    //init_solver4(solver);
 
     // struct alol {int x; double y;} a;
     // double &gg = a.y;
@@ -168,6 +208,7 @@ int main(int argc, char* args[])
 
         //Main loop flag
         bool quit = false;
+        bool pause = true;
 
         //Event handler
         SDL_Event e;
@@ -184,13 +225,21 @@ int main(int argc, char* args[])
                 {
                     quit = true;
                 }
+                else if (e.type == SDL_KEYDOWN)
+                {
+                    if (e.key.keysym.sym == SDLK_p)
+                     pause = !pause;
+                }
             }
 
             // render_particles(*g_other, gRenderer);
             // SDL_Delay( 1000 ); //delay in millisecondes
 
-            std::cout << "iteration " << iter << std::endl;
-            solver.solve(dt, iter);
+            if (!pause)
+            {
+                std::cout << "iteration " << iter << std::endl;
+                solver.solve(dt, iter);
+            }
             
             SDL_SetRenderDrawColor( gRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
             SDL_RenderClear( gRenderer );
@@ -209,13 +258,21 @@ int main(int argc, char* args[])
 
             SDL_Delay( 10 ); //delay in millisecondes
 
-            iter++;
-        
+            //save the surface as png
+            if (!pause){
+                sprintf(filename_buf, "./pngs/frame_%04d.png", iter);
+
+                SDL_RenderReadPixels(gRenderer, NULL, SDL_PIXELFORMAT_ARGB8888, frm->pixels, frm->pitch);
+                IMG_SavePNG(frm, filename_buf);
+                
+                iter++;
+            }
         }   
     }
 
     //Free resources and close SDL
     close(gWindow, gRenderer);
+    SDL_FreeSurface(frm); 
 
     return 0;
 }

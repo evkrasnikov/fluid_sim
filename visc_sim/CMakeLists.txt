@@ -18,6 +18,8 @@ set(PROJECT_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
 file(GLOB ${PROJECT_NAME}_src ${PROJECT_ROOT}/src/*.cpp)
 file(GLOB ${PROJECT_NAME}_h ${PROJECT_ROOT}/include/*.h)
 
+message (STATUS ${PROJECT_ROOT}})
+message (STATUS ${${PROJECT_NAME}_utils_c})
 #link_directories(${SDL2_DIR}/build)
 
 #might want to compile with c++11 option or even 14
@@ -26,8 +28,8 @@ file(GLOB ${PROJECT_NAME}_h ${PROJECT_ROOT}/include/*.h)
 # target_include_directories(${PROJECT_NAME}.exe PUBLIC ${PROJECT_ROOT}/include/ ${EIGEN_DIR} )
 # target_link_libraries(${PROJECT_NAME}.exe SDL2 SDL2_image)
 
-file(GLOB ${PROJECT_NAME}_src ${PROJECT_ROOT}/src/*.cpp)
-file(GLOB ${PROJECT_NAME}_h ${PROJECT_ROOT}/include/*.h)
+# file(GLOB ${PROJECT_NAME}_src ${PROJECT_ROOT}/src/*.cpp)
+# file(GLOB ${PROJECT_NAME}_h ${PROJECT_ROOT}/include/*.h)
 
 add_executable(${EXE_NAME} ${${PROJECT_NAME}_src} )
 target_include_directories(${EXE_NAME} PUBLIC ${PROJECT_ROOT}/include/ ${EIGEN_DIR} )
