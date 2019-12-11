@@ -49,6 +49,16 @@ class FluidSolver
     const double KNEAR = 5;//0.1; //
     const double SIGMA = 0;//1;//
     const double BETA  = 0.2; //0.2;
+    
+    // plasticity and elasticity 
+    const double GAMMA = 0.1;
+    const double ALPHA = 0.3;
+    const double K_SPRING = 40; //0.3;
+    double D_STICK = 1.55;
+    double MU = 0.8;
+
+    // boundary stuff
+    double K_STICK = 35;
 
     //keep 2 ping ponging grids
     int active_grid; // indicates which grid is currently in use
@@ -184,14 +194,15 @@ class FluidSolver
         for (int i = 0; i < particles.size(); i++)
         {
             Particle& this_p = particles[i];
-
-            //collision resolution TODO better
-            collisionWalls(this_p, dt);
-            collisionSpheres(this_p);
-
             //update velocity
             
             this_p.v = (this_p.pos - this_p.prev_pos)/dt;
+
+            //collision resolution TODO better
+            collisionWalls(this_p, dt);
+            collisionSpheres(this_p, dt);
+
+            
 
             //updateParticleIndex(this_p);
             addParticleGrid(this_p, other_grid, i);
@@ -243,11 +254,18 @@ class FluidSolver
 
     void collisionWalls(Particle& this_p, double dt)
     {
-        double D_STICK = H/2;
-        double K_STICK = 0.5;
+        // double D_STICK = H/2;
+        // double K_STICK = 0.5;
 
-        Eigen::Vector2d factor1; factor1 << 0,0.8;//0, 0.9;
-        Eigen::Vector2d factor2; factor2 << 0.8,0;//0.9, 0;
+        Eigen::Vector2d factor1; factor1 << 0,MU;//0, 0.9;
+        Eigen::Vector2d factor2; factor2 << MU,0;//0.9, 0;
+        Eigen::Vector2d sticky_impulse; sticky_impulse << 0,0;
+        // if (this_p.pos(0)< D_STICK)
+        // {
+        //     Eigen::Vector2d norm_vec; norm_vec << 1,0;
+        //     double d_i = fabs(this_p.pos(0));
+        //     sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec;
+        // }
         if (this_p.pos(0)<0)
         {
             this_p.pos(0) = 0.01;
@@ -284,34 +302,59 @@ class FluidSolver
         }
     }
 
-    void collisionSpheres(Particle& this_p)
+    void collisionSpheres(Particle& this_p, double dt)
     {
-
+        
         for (int i = 0; i < spheres.size(); i++)
         {
             //std::cout << i << std::endl;
             Eigen::Vector2d normal = this_p.pos - spheres[i].pos;
             Eigen::Vector2d norm_vec = normal.normalized();
             double dist = normal.norm();
+
+            //apply sticky impulse 
+            double d_i = fabs(dist - spheres[i].r);
+            
+            //std::cout << d_i << std::endl;
+            Eigen::Vector2d sticky_impulse;
+            sticky_impulse << 0, 0;
+            if (d_i <= D_STICK)
+            {
+                sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec; 
+                //std::cout << sticky_impulse.transpose() << " " << norm_vec.transpose()<< std::endl;
+            }
+             
+
             if (dist <= spheres[i].r)
             {
                 //std::cout << "inside!!1" << std::endl;
                 //split velocity vector into normal and tangential compnents
                 Eigen::Vector2d v_norm = this_p.v.dot(norm_vec)*norm_vec;
                 this_p.v -= v_norm;
-                this_p.v *= 0.8;
+                this_p.v *= MU;
+
+                // //apply sticky impulse 
+                // double d_i = fabs(dist - spheres[i].r);
+                // double d_stick = 0.05;
+                // std::cout << d_i << std::endl;
+                // if (d_i <= d_stick)
+                // {
+                //     this_p.v -= dt*K_STICK*d_i*(1-d_i/d_stick)*norm_vec; 
+                // }
+                
 
                 //extract particle form the sphere
                 this_p.pos += (spheres[i].r - dist)*norm_vec;
             }
+
+            this_p.v -= sticky_impulse;
         }
     }
 
     void adjustSprings(double dt, bool is_first_step)
     {
-        double GAMMA = 0.1;
-        double ALPHA = 0.5;
-        double L = H/2;//H/2;
+
+        //double L = H/2;//H/2;
 
         //first, look thhrough the nbrs of every particle and 
         // add a spring if distance b/w particles is < H
@@ -392,7 +435,7 @@ class FluidSolver
     
     void applySprings(double dt)
     {
-        double K_SPRING = 30;//0.3;
+        
         std::cout << "num springs " << springs.size() << std::endl; 
         std::cout << "num particles " << particles.size() << std::endl; 
         for (auto it = springs.begin(); it != springs.end(); it++)

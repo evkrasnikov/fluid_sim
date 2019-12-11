@@ -77,8 +77,8 @@ void render_spheres(FluidSolver& solver, SDL_Renderer* gRenderer, SDL_Texture* t
 
 void init_solver(FluidSolver& solver)
 {
-    for (double i = 100; i< 120; i+=1) {
-        for (double j = 20; j<70; j+=1) {
+    for (double i = 70; i< 100; i+=1) {
+        for (double j = 30; j<60; j+=1) {
             std::cout << i << " " << j << std::endl;
             Particle p;
             p.pos << j,i;
@@ -180,8 +180,8 @@ int main(int argc, char* args[])
 
     FluidSolver solver(WORLD_WIDTH, WORLD_HEIGHT);
     double dt = 1.0/30.0;///4.0;
-    init_solver(solver);
-    //init_solver4(solver);
+    //init_solver(solver);
+    init_solver3(solver);
 
     // struct alol {int x; double y;} a;
     // double &gg = a.y;
