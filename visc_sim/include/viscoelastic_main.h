@@ -18,6 +18,14 @@ struct Particle
         std::cout << "v " << v.transpose() << std::endl;
         std::cout << std::endl;
     }
+
+    void reset()
+    {
+        //pos << 0,0;
+        //prev_pos << 0,0;
+        //v << 0,0;
+        nidx = nx = ny = 0;
+    }
 };
 
 struct Spring
@@ -32,10 +40,37 @@ struct Sphere
     double r; //sphere radius
 };
 
-// struct Rectangle
-// {
-//     Eigen::Vector
-// }
+/*
+ Struct for setting the parameters that control simulation and material properties
+*/
+struct Settings
+{
+    double H;//3;//
+    double RHO0;//10;//
+    double K;//0.04;//
+    double KNEAR;//0.1; //
+    double SIGMA;//1;//
+    double BETA; //0.2;
+    
+    // plasticity and elasticity 
+    double GAMMA;
+    double ALPHA;
+    double K_SPRING; //0.3;
+
+    // boundary stuff
+    double K_STICK;
+    double D_STICK;
+    double MU;
+};
+
+// defines the starting configuration of the water blob
+struct WaterRect
+{
+    double width, height; // width and hight of the rectangular water blob
+    double x, y; // position of the top left particle in the rectangle
+    double step; // horizontal and vertical separation between the particles
+    double v_x, v_y; // initial velocity of the water blob
+};
 
 class FluidSolver
 {
@@ -43,22 +78,22 @@ class FluidSolver
     std::vector<Particle> particles;
     int width, height; //world dims
     
-    const double H = 3.4;//3;//
-    const double RHO0 = 15;//10;//
-    const double K = 0.5;//0.04;//
-    const double KNEAR = 5;//0.1; //
-    const double SIGMA = 0;//1;//
-    const double BETA  = 0.2; //0.2;
+    double H;//3;//
+    double RHO0;//10;//
+    double K;//0.04;//
+    double KNEAR;//0.1; //
+    double SIGMA;//1;//
+    double BETA; //0.2;
     
     // plasticity and elasticity 
-    const double GAMMA = 0.1;
-    const double ALPHA = 0.3;
-    const double K_SPRING = 40; //0.3;
-    double D_STICK = 1.55;
-    double MU = 0.8;
+    double GAMMA;
+    double ALPHA;
+    double K_SPRING; //0.3;
+    double D_STICK;
+    double MU;
 
     // boundary stuff
-    double K_STICK = 35;
+    double K_STICK;
 
     //keep 2 ping ponging grids
     int active_grid; // indicates which grid is currently in use
@@ -83,10 +118,24 @@ class FluidSolver
         }
     }
 
-    FluidSolver(int world_width, int world_height)
+    FluidSolver(int world_width, int world_height, Settings sim_settings, std::vector<Sphere> sim_spheres, WaterRect w)
     {
         width = world_width;
         height = world_height;
+
+        // set the simulation parameters
+        H = sim_settings.H;//3;//
+        RHO0 = sim_settings.RHO0;//10;//
+        K = sim_settings.K;//0.04;//
+        KNEAR = sim_settings.KNEAR;//0.1; //
+        SIGMA = sim_settings.SIGMA;//1;//
+        BETA  = sim_settings.BETA; //0.2;
+        GAMMA = sim_settings.GAMMA;
+        ALPHA = sim_settings.ALPHA;
+        K_SPRING = sim_settings.K_SPRING; //0.3;
+        D_STICK = sim_settings.D_STICK;
+        MU = sim_settings.MU;
+        K_STICK = sim_settings.K_STICK;
 
         //resize the grid
         grid_width = ceil(world_width/H);
@@ -97,13 +146,23 @@ class FluidSolver
         active_grid = 0;
         //nbrs.resize(grid_height*grid_width);
 
-        Sphere s;
-        s.pos << 50,50;
-        s.r = 20;
-        spheres.push_back(s);
-        s.pos << 20, 20;
-        s.r = 10;
-        spheres.push_back(s);
+        // setup the collision spheres
+        spheres = sim_spheres;
+        
+        // set up the initial water blob
+        for (double i = w.y; i < (w.y + w.height); i += w.step)
+        {
+            for (double j = w.x; j < (w.x + w.width); j += w.step)
+            {
+                Particle p;
+                p.reset();
+                p.pos << j,i;
+                p.prev_pos << j,i;
+                p.v << w.v_x, w.v_y;
+                addParticle(p, active_grid);
+            }
+        }
+
 
     }
 
@@ -153,27 +212,9 @@ class FluidSolver
         }
 
         findNeighbours();
-        // for (int e = 0; e < nbrs[50].size(); e++)
-        //     std::cout << nbrs[50][e] << " ";
-        // std::cout << std::endl;
-        // std::cout << particles[0].pos << " " << particles[0].nx << " " << particles[0].ny << std::endl;
-        // std::cout << nbrs.size() << std::endl;
-        // std::cout << "in cell ";
-        // for (int e = 0; e < grid[active_grid][7*grid_width+8].size(); e++)
-        // {
-        //     std::vector<int>& p = grid[active_grid][7*grid_width+8];
-        //     std::cout << p[e] << " ";
-        // }
 
         // int debug_idx = 1091;
         // particles[debug_idx].print();
-        // for (int z = 0; z < nbrs[debug_idx].size(); z++)
-        // {
-        //     std::cout << nbrs[debug_idx]
-        //     printf("NEIGHBOR %d ", nbrs[debug_idx][z]);
-        //     particles[nbrs[debug_idx][z]].print();
-        // }
-        // printf("\n");
         applyViscosity(dt, iter);
         // particles[debug_idx].print();
         for (int i = 0; i < particles.size(); i++)
@@ -198,11 +239,9 @@ class FluidSolver
             
             this_p.v = (this_p.pos - this_p.prev_pos)/dt;
 
-            //collision resolution TODO better
+            //collision resolution 
             collisionWalls(this_p, dt);
             collisionSpheres(this_p, dt);
-
-            
 
             //updateParticleIndex(this_p);
             addParticleGrid(this_p, other_grid, i);
@@ -254,52 +293,63 @@ class FluidSolver
 
     void collisionWalls(Particle& this_p, double dt)
     {
-        // double D_STICK = H/2;
-        // double K_STICK = 0.5;
-
-        Eigen::Vector2d factor1; factor1 << 0,MU;//0, 0.9;
-        Eigen::Vector2d factor2; factor2 << MU,0;//0.9, 0;
+        Eigen::Vector2d factor1; factor1 << 0,MU;
+        Eigen::Vector2d factor2; factor2 << MU,0;
         Eigen::Vector2d sticky_impulse; sticky_impulse << 0,0;
-        // if (this_p.pos(0)< D_STICK)
-        // {
-        //     Eigen::Vector2d norm_vec; norm_vec << 1,0;
-        //     double d_i = fabs(this_p.pos(0));
-        //     sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec;
-        // }
+        
+        //left wall
+        double d_i = fabs(this_p.pos(0));
+        if (d_i < D_STICK) 
+        {
+            Eigen::Vector2d norm_vec; norm_vec << 1,0;
+            sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec;
+        }
         if (this_p.pos(0)<0)
         {
             this_p.pos(0) = 0.01;
             this_p.v = this_p.v.array() * factor1.array();
         }
-        // if (this_p.pos(0)<D_STICK) //near the boundary
-        // {
-        //     this_p.pos(0) = 0.01;
-        //     this_p.v = this_p.v.array() * factor1.array();
-        //     //Eigen::Vector2d normal; normal << 1, 0;
-        //     double d = this_p.pos(0);
-        //     this_p.v(0) = -dt*K_STICK*d*(1-d/D_STICK);
-        // }
 
+        //right wall
+        d_i = fabs(width - this_p.pos(0));
+        if (d_i < D_STICK) //left wall
+        {
+            Eigen::Vector2d norm_vec; norm_vec << -1,0;
+            sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec;
+        }
         if (this_p.pos(0) > width)
         {
             this_p.pos(0) = width-0.01;
             this_p.v = this_p.v.array() * factor1.array();
         }
-        // else if (width - this_p.pos(0)<D_STICK)
-        // {
-        //     double d = this_p.pos(0);
-        // }
 
+        //bottom wall 
+        d_i = fabs(this_p.pos(1));
+        if (d_i < D_STICK) //left wall
+        {
+            Eigen::Vector2d norm_vec; norm_vec << 0,1;
+            sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec;
+        }
         if (this_p.pos(1)<0)
         {
             this_p.pos(1) = 0.01;
             this_p.v = this_p.v.array() * factor2.array();
         }
-        else if (this_p.pos(1) > height)
+        
+        //top wall
+        d_i = fabs(height - this_p.pos(1));
+        if (d_i < D_STICK) //left wall
+        {
+            Eigen::Vector2d norm_vec; norm_vec << 0,-1;
+            sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec;
+        }
+        if (this_p.pos(1) > height)
         {
             this_p.pos(1) = height-0.01;
             this_p.v = this_p.v.array() * factor2.array();
         }
+
+        this_p.v -= sticky_impulse;
     }
 
     void collisionSpheres(Particle& this_p, double dt)
@@ -307,43 +357,27 @@ class FluidSolver
         
         for (int i = 0; i < spheres.size(); i++)
         {
-            //std::cout << i << std::endl;
             Eigen::Vector2d normal = this_p.pos - spheres[i].pos;
             Eigen::Vector2d norm_vec = normal.normalized();
             double dist = normal.norm();
 
-            //apply sticky impulse 
             double d_i = fabs(dist - spheres[i].r);
-            
-            //std::cout << d_i << std::endl;
             Eigen::Vector2d sticky_impulse;
             sticky_impulse << 0, 0;
             if (d_i <= D_STICK)
             {
                 sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec; 
-                //std::cout << sticky_impulse.transpose() << " " << norm_vec.transpose()<< std::endl;
             }
              
 
             if (dist <= spheres[i].r)
             {
-                //std::cout << "inside!!1" << std::endl;
                 //split velocity vector into normal and tangential compnents
                 Eigen::Vector2d v_norm = this_p.v.dot(norm_vec)*norm_vec;
                 this_p.v -= v_norm;
                 this_p.v *= MU;
 
-                // //apply sticky impulse 
-                // double d_i = fabs(dist - spheres[i].r);
-                // double d_stick = 0.05;
-                // std::cout << d_i << std::endl;
-                // if (d_i <= d_stick)
-                // {
-                //     this_p.v -= dt*K_STICK*d_i*(1-d_i/d_stick)*norm_vec; 
-                // }
-                
-
-                //extract particle form the sphere
+                //extract particle from the sphere
                 this_p.pos += (spheres[i].r - dist)*norm_vec;
             }
 
@@ -353,9 +387,6 @@ class FluidSolver
 
     void adjustSprings(double dt, bool is_first_step)
     {
-
-        //double L = H/2;//H/2;
-
         //first, look thhrough the nbrs of every particle and 
         // add a spring if distance b/w particles is < H
         for (int i = 0; i< particles.size(); i++)
@@ -394,9 +425,6 @@ class FluidSolver
             if (rij_mag > rest_len + d)
             {
                 rest_len += dt*ALPHA*(rij_mag - rest_len - d);
-                //std::cout << "expand " << rest_len << std::endl;
-                // if (rij_mag > H)
-                //     std::cout << rij_mag << " BOOOOOYAAAA!\n";
             }
             else if (rij_mag < rest_len - d)
             {
@@ -408,25 +436,11 @@ class FluidSolver
             {
                 to_delete.push_back(it->first); 
                 num_deleted++;
-                //assert(0);
             }
             
         }
 
-
-        
-        // for (auto it = springs.begin(); it != springs.end(); it++)
-        // {
-        //     //printf("%f \n", (it->second).l);
-        //     if ((it->second).l > H)
-        //     {
-        //         to_delete.push_back(it->first); 
-        //         num_deleted++;
-        //         assert(0);
-        //     }
-        // }
         printf("Number of deleted springs %d\n", num_deleted);
-        
         for (auto it = 0; it < to_delete.size(); it++)
         {
            springs.erase(to_delete[it]);
@@ -445,28 +459,14 @@ class FluidSolver
             Particle &p2 = particles[s.p_idx2];
             Eigen::Vector2d rij = p1.pos - p2.pos;
             Eigen::Vector2d D = dt*dt*K_SPRING*(1-s.l/H)*(s.l-rij.norm())*rij.normalized();
-            // std::cout << "spring " << s.l << " " << rij.transpose() << std::endl;
-            // std::cout << D.transpose() << std::endl;
             p1.pos += 0.5*D;
             p2.pos -= 0.5*D;
         }
-        // for (int i = 0; i< particles.size(); i++)
-        // {
-        //     Particle& this_p = particles[i];
-        //     for (int j = 0; j < nbrs[i].size(); j++)
-        //     {
-        //         if (i < nbrs[i][j]) continue;
-        //         Particle& nbr_p = particles[nbrs[i][j]];
-        //         Eigen::Vector2d rij = nbr_p.pos - this_p.pos;
-        //         Eigen::Vector2d rij_norm = rij.normalized();
-        //     }
-        // }
     }
 
-// break viscoelastic_main.h:217 if iter == 57
     void applyViscosity(double dt, int iter)
     {
-        printf("iter %d\n", iter);
+        //printf("iter %d\n", iter);
         std::cout << nbrs.size() << std::endl;
         for (int k = 0; k < nbrs.size(); k++)
         {
@@ -483,65 +483,15 @@ class FluidSolver
                 if (q < 1)
                 {
                     // if (Eigen::isnan(this_p.v.array()).any())
-                    // {
-                    //     std::cout << "before " << std::endl;
-                    //     assert(0);
-                    // }
-                    // if (k==711)
-                    // {
-                    //     std::cout << "before " << std::endl;
-                    //     std::cout << "idx " << k << std::endl;
-                    //     std::cout << "in visc nbr" << nbr_p.v.transpose() << std::endl;
-                    //     std::cout << "in visc this " << this_p.v.transpose() << std::endl;
-                    //     //assert(0);
-                    // }
-                        //     if (k==1666)
-                        // {
-                        //     std::cout << "q in visc this " << this_p.v.transpose() << std::endl;
-                        // }
-                    
+                   
                     double u = rij_norm.dot(this_p.v - nbr_p.v);
                     if (u > 0)
                     {
-                        // if (nbrs[k][j]==1091  )
-                        // {
-                        //     std::cout << "before in visc nbr " << nbr_p.v.transpose() << std::endl;
-                        //     std::cout << "before in visc this " << this_p.v.transpose() << " " << k << std::endl;
-                        // }
-                        // if (k == 1091)
-                        // {
-                        //     std::cout << "before in visc this " << this_p.v.transpose() << std::endl;
-                        // }
-
                         Eigen::Vector2d I = dt*(1-q)*(SIGMA*u+BETA*u*u)*rij_norm;
                         this_p.v -= 0.5*I;
                         nbr_p.v += 0.5*I;
 
-                        // if (nbrs[k][j]==1091  )
-                        // {
-                        //     std::cout << "after in visc nbr " << nbr_p.v.transpose() << std::endl;
-                        // }
-                        // if (k == 1091)
-                        // {
-                        //     std::cout << "after in visc this " << this_p.v.transpose() << std::endl;
-                        // }
                     }
-                    // if (Eigen::isnan(this_p.v.array()).any())
-                    // {
-                    //     std::cout << "after " << std::endl;
-                    //     std::cout << "idx " << k << std::endl;
-                    //     std::cout << "in visc nbr" << nbr_p.v.transpose() << std::endl;
-                    //     std::cout << "in visc this " << this_p.v.transpose() << std::endl;
-                    //     assert(0);
-                    // }
-
-                    // if (nbrs[k][j] == 435)
-                    // {
-                    //     std::cout << "in visc nbr" << nbr_p.v.transpose() << std::endl;
-                    //     std::cout << "in visc this " << this_p.v.transpose() << std::endl;
-                    //     //std::cout << "in visc nbr " << nbr_p.pos.transpose() << std::endl;
-                    //     std::cout << "in visc u dist " << u << " " << dist << std::endl;
-                    // }
                 }
             }
         }

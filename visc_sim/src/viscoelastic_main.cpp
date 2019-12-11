@@ -75,6 +75,37 @@ void render_spheres(FluidSolver& solver, SDL_Renderer* gRenderer, SDL_Texture* t
     }
 }
 
+void set_settings(Settings& set)
+{
+    set.H = 3.4;//3;//
+    set.RHO0 = 15;//10;//
+    set.K = 0.5;//0.04;//
+    set.KNEAR = 5;//0.1; //
+    set.SIGMA = 0;//1;//
+    set.BETA  = 0.2; //0.2;
+    
+    // plasticity and elasticity 
+    set.GAMMA = 0.1;
+    set.ALPHA = 0.3;
+    set.K_SPRING = 0.3;//40; //0.3;
+    set.D_STICK = 1.55;
+    set.MU = 0.8;
+
+    // boundary stuff
+    set.K_STICK = 35;//35;
+}
+
+void set_spheres(std::vector<Sphere>& spheres)
+{
+    Sphere s;
+    s.pos << 50,50;
+    s.r = 20;
+    spheres.push_back(s);
+    s.pos << 20, 20;
+    s.r = 10;
+    spheres.push_back(s);
+}
+
 void init_solver(FluidSolver& solver)
 {
     for (double i = 70; i< 100; i+=1) {
@@ -178,10 +209,17 @@ int main(int argc, char* args[])
 
     SDL_Surface *frm = SDL_CreateRGBSurface(0, RENDER_WIDTH, RENDER_HEIGHT, 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000); //holds the output frame
 
-    FluidSolver solver(WORLD_WIDTH, WORLD_HEIGHT);
+    //WaterRect water_blob = {100, 20, 0, 120, 1, 0, 0};
+    WaterRect water_blob = {30, 30, 30, 120, 1, -10, 0};
+    std::vector<Sphere> spheres;
+    set_spheres(spheres);
+    Settings set;
+    set_settings(set);
+
+    FluidSolver solver(WORLD_WIDTH, WORLD_HEIGHT, set, spheres, water_blob);
     double dt = 1.0/30.0;///4.0;
     //init_solver(solver);
-    init_solver3(solver);
+    //init_solver3(solver);
 
     // struct alol {int x; double y;} a;
     // double &gg = a.y;
