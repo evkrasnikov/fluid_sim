@@ -61,6 +61,10 @@ struct Settings
     double K_STICK;
     double D_STICK;
     double MU;
+    Eigen::Vector2d G;
+
+    bool EN_MOLDING;
+    bool EN_SPRINGS;
 };
 
 // defines the starting configuration of the water blob
@@ -91,6 +95,9 @@ class FluidSolver
     double K_SPRING; //0.3;
     double D_STICK;
     double MU;
+    Eigen::Vector2d G;
+    bool EN_SPRINGS;
+    bool EN_MOLDING;
 
     // boundary stuff
     double K_STICK;
@@ -118,7 +125,7 @@ class FluidSolver
         }
     }
 
-    FluidSolver(int world_width, int world_height, Settings sim_settings, std::vector<Sphere> sim_spheres, WaterRect w)
+    FluidSolver(int world_width, int world_height, Settings sim_settings, std::vector<Sphere> sim_spheres, std::vector<WaterRect> water_blobs)
     {
         width = world_width;
         height = world_height;
@@ -136,6 +143,9 @@ class FluidSolver
         D_STICK = sim_settings.D_STICK;
         MU = sim_settings.MU;
         K_STICK = sim_settings.K_STICK;
+        G = sim_settings.G;
+        EN_MOLDING = sim_settings.EN_MOLDING;
+        EN_SPRINGS = sim_settings.EN_SPRINGS;
 
         //resize the grid
         grid_width = ceil(world_width/H);
@@ -149,17 +159,21 @@ class FluidSolver
         // setup the collision spheres
         spheres = sim_spheres;
         
-        // set up the initial water blob
-        for (double i = w.y; i < (w.y + w.height); i += w.step)
+        // set up the initial water blobs
+        for (int k = 0; k < water_blobs.size(); k++)
         {
-            for (double j = w.x; j < (w.x + w.width); j += w.step)
+            WaterRect& w = water_blobs[k];
+            for (double i = w.y; i < (w.y + w.height); i += w.step)
             {
-                Particle p;
-                p.reset();
-                p.pos << j,i;
-                p.prev_pos << j,i;
-                p.v << w.v_x, w.v_y;
-                addParticle(p, active_grid);
+                for (double j = w.x; j < (w.x + w.width); j += w.step)
+                {
+                    Particle p;
+                    p.reset();
+                    p.pos << j,i;
+                    p.prev_pos << j,i;
+                    p.v << w.v_x, w.v_y;
+                    addParticle(p, active_grid);
+                }
             }
         }
 
@@ -202,13 +216,13 @@ class FluidSolver
     void solve(double dt, int iter)
     {
         int other_grid = active_grid == 0 ? 1 : 0;
-        Eigen::Vector2d g;
-        g << 0, -9.81;
+        //Eigen::Vector2d g;
+        //g << 0, -9.81;
         
         std::cout << "active grid " << active_grid << std::endl;
         for (int i = 0; i < particles.size(); i++)
         {
-            particles[i].v += dt*g;
+            particles[i].v += dt*G;
         }
 
         findNeighbours();
@@ -224,8 +238,12 @@ class FluidSolver
         }
         // particles[debug_idx].print();
 
-        adjustSprings(dt, iter == 0); //false/**/);
-        applySprings(dt);
+        if (EN_SPRINGS)
+        {
+            adjustSprings(dt, (iter == 0) && EN_MOLDING);
+            applySprings(dt);
+        }
+
         doubleDensityRelaxation(dt);
 
         clearGrid(other_grid);
@@ -254,6 +272,7 @@ class FluidSolver
     {
         for (int i = 0; i< particles.size(); i++)
         {
+            //calculate near and far densities
             Particle& this_p = particles[i];
             double rho = 0, rho_near = 0;
             for (int j = 0; j < nbrs[i].size(); j++)
@@ -312,7 +331,7 @@ class FluidSolver
 
         //right wall
         d_i = fabs(width - this_p.pos(0));
-        if (d_i < D_STICK) //left wall
+        if (d_i < D_STICK)
         {
             Eigen::Vector2d norm_vec; norm_vec << -1,0;
             sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec;
@@ -325,7 +344,7 @@ class FluidSolver
 
         //bottom wall 
         d_i = fabs(this_p.pos(1));
-        if (d_i < D_STICK) //left wall
+        if (d_i < D_STICK)
         {
             Eigen::Vector2d norm_vec; norm_vec << 0,1;
             sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec;
@@ -338,7 +357,7 @@ class FluidSolver
         
         //top wall
         d_i = fabs(height - this_p.pos(1));
-        if (d_i < D_STICK) //left wall
+        if (d_i < D_STICK)
         {
             Eigen::Vector2d norm_vec; norm_vec << 0,-1;
             sticky_impulse = dt*K_STICK*d_i*(1-d_i/D_STICK)*norm_vec;
@@ -455,12 +474,12 @@ class FluidSolver
         for (auto it = springs.begin(); it != springs.end(); it++)
         {
             Spring &s = it->second;
-            Particle &p1 = particles[s.p_idx1];
-            Particle &p2 = particles[s.p_idx2];
-            Eigen::Vector2d rij = p1.pos - p2.pos;
+            Particle &p1 = particles[s.p_idx1]; //i
+            Particle &p2 = particles[s.p_idx2]; //j
+            Eigen::Vector2d rij = p2.pos - p1.pos;
             Eigen::Vector2d D = dt*dt*K_SPRING*(1-s.l/H)*(s.l-rij.norm())*rij.normalized();
-            p1.pos += 0.5*D;
-            p2.pos -= 0.5*D;
+            p1.pos -= 0.5*D;
+            p2.pos += 0.5*D;
         }
     }
 
@@ -500,10 +519,14 @@ class FluidSolver
     void getPotentialNbrs(std::vector<int>& p_nbrs, Particle& p)
     {
         p_nbrs.clear();
+
+        // find the grid cell coordinates where neighbours may reside
         int i_from = p.ny - 1 < 0 ? 0 : p.ny-1;
         int i_to = p.ny + 1 >= grid_height ? p.ny : p.ny+1;
         int j_from = p.nx - 1 < 0 ? 0 : p.nx-1;
         int j_to = p.nx + 1 >= grid_width ? p.nx : p.nx+1;
+        
+        // accumulate indeces of all particles from neighboring cells into p_nbrs
         for (int ii = i_from; ii <= i_to; ii++)
         for (int jj = j_from; jj <= j_to; jj++)
         {
