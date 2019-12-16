@@ -19,7 +19,6 @@ void render_particles(FluidSolver& solver, SDL_Renderer* gRenderer, SDL_Texture*
     c << 0, WORLD_HEIGHT;
     Eigen::Matrix2d s; //scale matrix
     s << RENDER_WIDTH/WORLD_WIDTH, 0, 0, -RENDER_HEIGHT/WORLD_HEIGHT;
-    // std::cout << s << std::endl;
     
     for(int k = 0; k < solver.particles.size(); k++)
     {
@@ -27,7 +26,6 @@ void render_particles(FluidSolver& solver, SDL_Renderer* gRenderer, SDL_Texture*
         SDL_SetRenderDrawColor( gRenderer, 0xFF, 0x00, 0x00, 0xFF );
         Eigen::Vector2d particle_pos = p.pos;
         Eigen::Vector2d world_pos = s*(particle_pos-c);
-        //std::cout << "pos " << particle_pos.transpose() << " " << world_pos.transpose() << std::endl;
 
         if (texture != NULL)
         {
@@ -41,8 +39,6 @@ void render_particles(FluidSolver& solver, SDL_Renderer* gRenderer, SDL_Texture*
         {
             SDL_RenderDrawPoint( gRenderer, round(world_pos(0)), round(world_pos(1)) );
         }
-        
-        
     }
 
 }
@@ -53,49 +49,40 @@ void render_spheres(FluidSolver& solver, SDL_Renderer* gRenderer, SDL_Texture* t
     c << 0, WORLD_HEIGHT;
     Eigen::Matrix2d s_mat; //scale matrix
     s_mat << RENDER_WIDTH/WORLD_WIDTH, 0, 0, -RENDER_HEIGHT/WORLD_HEIGHT;
-    // std::cout << s << std::endl;
+
     for(int k = 0; k < solver.spheres.size(); k++)
     {
         Sphere s = solver.spheres[k];
-        //SDL_SetRenderDrawColor( gRenderer, 0xFF, 0x00, 0x00, 0xFF );
+
         Eigen::Vector2d sphere_pos = s.pos;
         Eigen::Vector2d world_pos = s_mat*(sphere_pos-c);
         Eigen::Vector2d world_r; 
         world_r << s.r*RENDER_WIDTH/WORLD_WIDTH, s.r*RENDER_HEIGHT/WORLD_HEIGHT;
-        //std::cout << "pos " << particle_pos.transpose() << " " << world_pos.transpose() << std::endl;
 
         int x = round(world_pos(0)-world_r(0));
         int y = round(world_pos(1)-world_r(1));
         SDL_Rect srcrect = {0,0,201,201};
         SDL_Rect dstrect = {x,y,int(world_r(0)*2),int(world_r(1)*2)};
         SDL_RenderCopy(gRenderer, texture, &srcrect, &dstrect);
-
-        
-        
     }
 }
 
 // zero gravity,2 water blobs merging together
 void scene1(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>& water_blobs)
 {
-    set.H = 3.4;//3;//
-    set.RHO0 = 15;//10;//
-    set.K = 0.1;//0.04;//
-    set.KNEAR = 1;//0.1; //
-    set.SIGMA = 0;//1;//
-    set.BETA  = 0.2; //0.2;
-    
-    // plasticity and elasticity 
+    set.H = 3.4;
+    set.RHO0 = 15;
+    set.K = 0.1;
+    set.KNEAR = 1;
+    set.SIGMA = 0;
+    set.BETA  = 0.2; 
     set.GAMMA = 0.1;
     set.ALPHA = 0.3;
-    set.K_SPRING = 30; //0.3;
+    set.K_SPRING = 30; 
     set.D_STICK = 1.55;
     set.MU = 0.8;
-
-    // boundary stuff
-    set.K_STICK = 5;//35;
-
-    set.G << 0, 0;//-9.81;
+    set.K_STICK = 5;
+    set.G << 0, 0;
     set.EN_MOLDING = 0;
     set.EN_SPRINGS = 0; 
 
@@ -108,24 +95,19 @@ void scene1(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>&
 // zero gravity 2 water blobs eventually taking a circular shape
 void scene2(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>& water_blobs)
 {
-    set.H = 3.4;//3;//
-    set.RHO0 = 15;//10;//
-    set.K = 25;//0.04;//
-    set.KNEAR = 250;//0.1; //
-    set.SIGMA = 0;//1;//
-    set.BETA  = 0.2; //0.2;
-    
-    // plasticity and elasticity 
+    set.H = 3.4;
+    set.RHO0 = 15;
+    set.K = 25;
+    set.KNEAR = 250;
+    set.SIGMA = 0;
+    set.BETA  = 0.2;
     set.GAMMA = 0.1;
     set.ALPHA = 0.3;
     set.K_SPRING = 30; //0.3;
     set.D_STICK = 1.55;
     set.MU = 0.8;
-
-    // boundary stuff
-    set.K_STICK = 5;//35;
-
-    set.G << 0, 0;//-9.81;
+    set.K_STICK = 5;
+    set.G << 0, 0;
     set.EN_MOLDING = 0;
     set.EN_SPRINGS = 0; 
 
@@ -138,23 +120,18 @@ void scene2(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>&
 // different resolution (low resolution / large distance between the particles)
 void scene3(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>& water_blobs)
 {
-    set.H = 5;//3;//
-    set.RHO0 = 2;//10;//
-    set.K = 0.5;//0.04;//
-    set.KNEAR = 5;//0.1; //
-    set.SIGMA = 0;//1;//
-    set.BETA  = 0.2; //0.2;
-    
-    // plasticity and elasticity 
+    set.H = 5;
+    set.RHO0 = 2;
+    set.K = 0.5;
+    set.KNEAR = 5;
+    set.SIGMA = 0;
+    set.BETA  = 0.2; 
     set.GAMMA = 0.1;
     set.ALPHA = 0.3;
-    set.K_SPRING = 30; //0.3;
+    set.K_SPRING = 30;
     set.D_STICK = 1.55;
     set.MU = 0.9;
-
-    // boundary stuff
     set.K_STICK = 0.5;//35;
-
     set.G << 0, -9.81;
     set.EN_MOLDING = 0;
     set.EN_SPRINGS = 0; 
@@ -168,23 +145,18 @@ void scene3(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>&
 // different resolution (low resolution / small distance between the particles)
 void scene4(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>& water_blobs)
 {
-    set.H = 3.4;//3;//
-    set.RHO0 = 20;//10;//
-    set.K = 0.5;//0.04;//
-    set.KNEAR = 5;//0.1; //
-    set.SIGMA = 0;//1;//
-    set.BETA  = 0.2; //0.2;
-    
-    // plasticity and elasticity 
+    set.H = 3.4;
+    set.RHO0 = 20;
+    set.K = 0.5;
+    set.KNEAR = 5;
+    set.SIGMA = 0;
+    set.BETA  = 0.2; 
     set.GAMMA = 0.1;
     set.ALPHA = 0.3;
     set.K_SPRING = 30; //0.3;
     set.D_STICK = 1.55;
     set.MU = 0.8;
-
-    // boundary stuff
     set.K_STICK = 0.5;//35;
-
     set.G << 0, -9.81;
     set.EN_MOLDING = 0;
     set.EN_SPRINGS = 0; 
@@ -204,17 +176,12 @@ void scene5(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>&
     set.KNEAR = 5;//0.1; //
     set.SIGMA = 0;//1;//
     set.BETA  = 0.03; //0.2;
-    
-    // plasticity and elasticity 
     set.GAMMA = 0.1;
     set.ALPHA = 0.3;
     set.K_SPRING = 30; //0.3;
     set.D_STICK = 1.55;
     set.MU = 0.8;
-
-    // boundary stuff
     set.K_STICK = 5;//35;
-
     set.G << 0, -9.81;
     set.EN_MOLDING = 0;
     set.EN_SPRINGS = 0; 
@@ -232,19 +199,14 @@ void scene6(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>&
     set.RHO0 = 15;//10;//
     set.K = 0.5;//0.04;//
     set.KNEAR = 5;//0.1; //
-    set.SIGMA = 0.4;//1;//
+    set.SIGMA = 0.5;//1;//
     set.BETA  = 0.6; //0.2;
-    
-    // plasticity and elasticity 
     set.GAMMA = 0.1;
     set.ALPHA = 0.3;
     set.K_SPRING = 30; //0.3;
     set.D_STICK = 1.55;
     set.MU = 0.8;
-
-    // boundary stuff
     set.K_STICK = 5;//35;
-
     set.G << 0, -9.81;
     set.EN_MOLDING = 0;
     set.EN_SPRINGS = 0; 
@@ -264,15 +226,11 @@ void scene7(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>&
     set.KNEAR = 5;//0.1; //
     set.SIGMA = 0;//1;//
     set.BETA  = 0.2; //0.2;
-    
-    // plasticity and elasticity 
     set.GAMMA = 0.1;
     set.ALPHA = 0.5;
     set.K_SPRING = 20; //0.3;
     set.D_STICK = 1.55;
     set.MU = 0.8;
-
-    // boundary stuff
     set.K_STICK = 25;//35;
 
     set.G << 0, -9.81;
@@ -302,15 +260,11 @@ void scene8(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>&
     set.KNEAR = 5;//0.1; //
     set.SIGMA = 0;//1;//
     set.BETA  = 0.2; //0.2;
-    
-    // plasticity and elasticity 
     set.GAMMA = 0.2;
     set.ALPHA = 0.1;
     set.K_SPRING = 40; //0.3;
     set.D_STICK = 1.55;
     set.MU = 0.8;
-
-    // boundary stuff
     set.K_STICK = 25;//35;
 
     set.G << 0, -9.81;
@@ -340,17 +294,12 @@ void scene9(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>&
     set.KNEAR = 50;//0.1; //
     set.SIGMA = 0;//1;//
     set.BETA  = 0.2; //0.2;
-    
-    // plasticity and elasticity 
     set.GAMMA = 0.1;
     set.ALPHA = 0.3;
     set.K_SPRING = 30; //0.3;
     set.D_STICK = 1.55;
     set.MU = 0.8;
-
-    // boundary stuff
     set.K_STICK = 5;//35;
-
     set.G << 0, 0;//-9.81;
     set.EN_MOLDING = 0;
     set.EN_SPRINGS = 0; 
@@ -399,41 +348,6 @@ void scene10(Settings& set, std::vector<Sphere>& spheres, std::vector<WaterRect>
     spheres.push_back(s);
 }
 
-// 2 water blobs as in scene1, but different H
-void set_settings(Settings& set)
-{
-    set.H = 3.4;//3;//
-    set.RHO0 = 15;//10;//
-    set.K = 0.5;//0.04;//
-    set.KNEAR = 5;//0.1; //
-    set.SIGMA = 0;//1;//
-    set.BETA  = 0.2; //0.2;
-    
-    // plasticity and elasticity 
-    set.GAMMA = 0.1;
-    set.ALPHA = 0.3;
-    set.K_SPRING = 30; //0.3;
-    set.D_STICK = 1.55;
-    set.MU = 0.8;
-
-    // boundary stuff
-    set.K_STICK = 55;//35;
-
-    set.G << 0, 0;//-9.81;
-    set.EN_MOLDING = 0;
-    set.EN_SPRINGS = 0; 
-}
-
-void set_spheres(std::vector<Sphere>& spheres)
-{
-    Sphere s;
-    s.pos << 50,50;
-    s.r = 20;
-    spheres.push_back(s);
-    s.pos << 20, 20;
-    s.r = 10;
-    spheres.push_back(s);
-}
 
 
 int main(int argc, char* args[])
@@ -469,17 +383,9 @@ int main(int argc, char* args[])
     SDL_Surface *frm = SDL_CreateRGBSurface(0, RENDER_WIDTH, RENDER_HEIGHT, 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000); //holds the output frame
     //SDL_Surface *frm = SDL_CreateRGBSurfaceWithFormat(0, RENDER_WIDTH, RENDER_HEIGHT, 24, SDL_PIXELFORMAT_RGB24);
 
-    //WaterRect water_blob = {100, 20, 0, 120, 1, 0, 0};
     std::vector<WaterRect> water_blobs;
-    // WaterRect water_blob1 = {30, 30, 30, 110, 1, -10, 0};
-    // WaterRect water_blob2 = {30, 30, 60, 80, 1, 0, 0};
-    // water_blobs.push_back(water_blob1);
-    // water_blobs.push_back(water_blob2);
-
     std::vector<Sphere> spheres;
-    // set_spheres(spheres);
     Settings set;
-    // set_settings(set);
 
     switch(scene_num)
     {
@@ -495,7 +401,6 @@ int main(int argc, char* args[])
         case 10: scene10(set, spheres, water_blobs); break;
         default: scene10(set, spheres, water_blobs); break;
     }
-    //scene10(set, spheres, water_blobs);
 
     FluidSolver solver(WORLD_WIDTH, WORLD_HEIGHT, set, spheres, water_blobs);
     double dt = 1.0/30.0;///4.0;

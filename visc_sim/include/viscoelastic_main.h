@@ -9,7 +9,10 @@
 
 struct Particle
 {
+    //current and previous position, velocity
     Eigen::Vector2d pos, prev_pos, v;
+    
+    //grid index
     int nidx, nx, ny;
     void print()
     {
@@ -31,7 +34,7 @@ struct Particle
 struct Spring
 {
     double l; //rest length of spring
-    int p_idx1, p_idx2;
+    int p_idx1, p_idx2; //particle indeces on both ends of the spring
 };
 
 struct Sphere
@@ -45,25 +48,40 @@ struct Sphere
 */
 struct Settings
 {
-    double H;//3;//
-    double RHO0;//10;//
-    double K;//0.04;//
-    double KNEAR;//0.1; //
-    double SIGMA;//1;//
-    double BETA; //0.2;
+    // Smoothing kernel radius
+    double H;
+
+    // Rest density
+    double RHO0;
     
-    // plasticity and elasticity 
+    // "far" density constant
+    double K;
+
+    // "near" density constant
+    double KNEAR;
+
+    // Viscosity parameters
+    double SIGMA;
+    double BETA;
+    
+    // Plasticity and elasticity parameters
     double GAMMA;
     double ALPHA;
-    double K_SPRING; //0.3;
+    double K_SPRING;
 
-    // boundary stuff
+    // Parameters for boundary handling
     double K_STICK;
     double D_STICK;
     double MU;
+
+    // Gravity vector
     Eigen::Vector2d G;
 
+    // Flag that initializes springs with distance between particles
+    // instead of H
     bool EN_MOLDING;
+
+    // Flag that enables elasticity and plasticity
     bool EN_SPRINGS;
 };
 
@@ -80,48 +98,45 @@ class FluidSolver
 {
     public:
     std::vector<Particle> particles;
-    int width, height; //world dims
+    int width, height;
     
-    double H;//3;//
-    double RHO0;//10;//
-    double K;//0.04;//
-    double KNEAR;//0.1; //
-    double SIGMA;//1;//
-    double BETA; //0.2;
-    
-    // plasticity and elasticity 
+    // simulation parameters
+    double H;
+    double RHO0;
+    double K;
+    double KNEAR;
+    double SIGMA;
+    double BETA; 
     double GAMMA;
     double ALPHA;
-    double K_SPRING; //0.3;
+    double K_SPRING; 
     double D_STICK;
     double MU;
     Eigen::Vector2d G;
     bool EN_SPRINGS;
     bool EN_MOLDING;
-
-    // boundary stuff
     double K_STICK;
 
     //keep 2 ping ponging grids
-    int active_grid; // indicates which grid is currently in use
+    int active_grid, other_grid; // indicates which grid is currently in use
     std::vector< std::vector<int> > grid[2]; //contains indeces of particles in a given cell (cell indeces are flattened)
     int grid_width, grid_height;
 
     std::vector< std::vector<int> > nbrs; //array of neighbour indeces
 
     std::map<int, Spring> springs; //map of a pair of particles to undeformed length
-    const int hash_const = 10000; //FIXME: lets assume for now i will not have more than 10000 particles
+    const int HASH_CONST = 10000; //FIXME: lets assume for now i will not have more than 10000 particles
 
-    std::vector<Sphere> spheres;
+    std::vector<Sphere> spheres; // contains all collision spheres in the simulation
 
-    //produces unique key (up to 10k particles) given two particle indeces
+    //produces unique key (up to HASH_CONST particles) given two particle indeces
     int springKey(int particle_idx1, int particle_idx2)
     {
         if (particle_idx1 < particle_idx2)
-            return particle_idx1*hash_const+particle_idx2;
+            return particle_idx1*HASH_CONST+particle_idx2;
         else
         {
-            return particle_idx2*hash_const+particle_idx1;
+            return particle_idx2*HASH_CONST+particle_idx1;
         }
     }
 
@@ -154,6 +169,7 @@ class FluidSolver
         grid[0].resize(grid_height*grid_width);
         grid[1].resize(grid_height*grid_width);
         active_grid = 0;
+        other_grid = 1;
         //nbrs.resize(grid_height*grid_width);
 
         // setup the collision spheres
@@ -180,10 +196,21 @@ class FluidSolver
 
     }
 
+    void switchGrid()
+    {
+        active_grid = other_grid;
+        other_grid = active_grid == 0 ? 1 : 0;
+    }
+
     void updateParticleIndex(Particle& p)
     {
         p.nx = floor(p.pos(0)/H);
         p.ny = floor(p.pos(1)/H);
+        
+        //clip indices to always be in range
+        p.nx = std::max(0,std::min(p.nx, grid_width-1));
+        p.ny = std::max(0,std::min(p.ny, grid_height-1));
+
         p.nidx = p.ny * grid_width + p.nx;;
     }
     void addParticle(Particle& p, int grid_idx)
@@ -215,28 +242,25 @@ class FluidSolver
 
     void solve(double dt, int iter)
     {
-        int other_grid = active_grid == 0 ? 1 : 0;
-        //Eigen::Vector2d g;
-        //g << 0, -9.81;
-        
+        findNeighbours();
         std::cout << "active grid " << active_grid << std::endl;
         for (int i = 0; i < particles.size(); i++)
         {
             particles[i].v += dt*G;
         }
 
-        findNeighbours();
-
-        // int debug_idx = 1091;
-        // particles[debug_idx].print();
         applyViscosity(dt, iter);
-        // particles[debug_idx].print();
+
+        clearGrid(other_grid);
         for (int i = 0; i < particles.size(); i++)
         {
             particles[i].prev_pos = particles[i].pos;
             particles[i].pos += dt*particles[i].v;
+
+            addParticleGrid(particles[i], other_grid, i);
         }
-        // particles[debug_idx].print();
+        switchGrid();
+        findNeighbours();
 
         if (EN_SPRINGS)
         {
@@ -247,8 +271,6 @@ class FluidSolver
         doubleDensityRelaxation(dt);
 
         clearGrid(other_grid);
-
-        // particles[debug_idx].print();
 
         for (int i = 0; i < particles.size(); i++)
         {
@@ -265,7 +287,8 @@ class FluidSolver
             addParticleGrid(this_p, other_grid, i);
 
         }
-        active_grid = active_grid == 0 ? 1 : 0;
+        switchGrid();
+        //active_grid = active_grid == 0 ? 1 : 0;
     }
 
     void doubleDensityRelaxation(double dt)
@@ -551,7 +574,7 @@ class FluidSolver
             for (int j = 0; j < p_nbrs.size(); j++)
             {
                 int nbr_idx = p_nbrs[j];
-                if (i <= nbr_idx) continue; //TODO should be <=
+                if (i <= nbr_idx) continue;
 
                 Particle p_other = particles[nbr_idx];
 
